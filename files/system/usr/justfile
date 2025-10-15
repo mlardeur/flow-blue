@@ -1,0 +1,230 @@
+# Flow Blue - Custom ujust recipes
+# Run with: ujust <command>
+
+# Install Nix via nix-toolbox (includes Home Manager setup)
+install-nix:
+    #!/usr/bin/bash
+    set -euo pipefail
+    echo "🔧 Installing Nix via nix-toolbox..."
+    echo "   This works on any Fedora 42 Atomic"
+    echo "   Home Manager is pre-configured"
+    echo ""
+    toolbox create --image ghcr.io/thrix/nix-toolbox:42
+    echo ""
+    echo "✅ Nix installed successfully!"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Run 'ujust setup-nix-wrappers' to use nix commands on host"
+    echo "  2. Configure Home Manager: home-manager edit"
+    echo "  3. Apply config: home-manager switch"
+
+# Create wrapper scripts to use nix/home-manager from host without entering toolbox
+setup-nix-wrappers:
+    #!/usr/bin/bash
+    set -euo pipefail
+    echo "🔗 Creating nix/home-manager wrappers for host..."
+    
+    # Create wrapper directory
+    mkdir -p ~/.local/bin
+    
+    # Create nix wrapper
+    cat > ~/.local/bin/nix << 'EOF'
+#!/usr/bin/bash
+exec toolbox run -c nix-toolbox-42 -- nix "$@"
+EOF
+    chmod +x ~/.local/bin/nix
+    
+    # Create nix-shell wrapper
+    cat > ~/.local/bin/nix-shell << 'EOF'
+#!/usr/bin/bash
+exec toolbox run -c nix-toolbox-42 -- nix-shell "$@"
+EOF
+    chmod +x ~/.local/bin/nix-shell
+    
+    # Create home-manager wrapper
+    cat > ~/.local/bin/home-manager << 'EOF'
+#!/usr/bin/bash
+exec toolbox run -c nix-toolbox-42 -- home-manager "$@"
+EOF
+    chmod +x ~/.local/bin/home-manager
+    
+    echo ""
+    echo "✅ Wrappers created in ~/.local/bin/"
+    echo ""
+    echo "Make sure ~/.local/bin is in your PATH:"
+    echo "  Add to ~/.bashrc or ~/.zshrc:"
+    echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+    echo ""
+    echo "After reloading your shell, you can use:"
+    echo "  nix search nixpkgs firefox"
+    echo "  home-manager edit"
+    echo "  home-manager switch"
+    echo ""
+    echo "All commands run inside toolbox automatically!"
+
+# Add ~/.local/bin to PATH in shell configs
+setup-path:
+    #!/usr/bin/bash
+    set -euo pipefail
+    echo "📝 Adding ~/.local/bin to PATH..."
+    
+    # For bash
+    if [ -f ~/.bashrc ]; then
+        if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc; then
+            echo '' >> ~/.bashrc
+            echo '# Add local bin to PATH (for nix wrappers)' >> ~/.bashrc
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+            echo "✅ Added to ~/.bashrc"
+        else
+            echo "ℹ️  Already in ~/.bashrc"
+        fi
+    fi
+    
+    # For zsh
+    if [ -f ~/.zshrc ]; then
+        if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' ~/.zshrc; then
+            echo '' >> ~/.zshrc
+            echo '# Add local bin to PATH (for nix wrappers)' >> ~/.zshrc
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+            echo "✅ Added to ~/.zshrc"
+        else
+            echo "ℹ️  Already in ~/.zshrc"
+        fi
+    fi
+    
+    echo ""
+    echo "✅ PATH configured!"
+    echo "   Reload your shell: exec $SHELL"
+
+# Complete setup - Install Nix, create wrappers, setup PATH
+setup-nix-complete:
+    #!/usr/bin/bash
+    echo "🚀 Complete Nix + Home Manager setup"
+    echo ""
+    just install-nix
+    echo ""
+    just setup-nix-wrappers
+    echo ""
+    just setup-path
+    echo ""
+    echo "=========================================="
+    echo "✅ Setup complete!"
+    echo "=========================================="
+    echo ""
+    echo "Reload your shell to activate:"
+    echo "  exec $SHELL"
+    echo ""
+    echo "Then try:"
+    echo "  nix search nixpkgs river"
+    echo "  home-manager edit"
+    echo "  home-manager switch"
+
+# Show Nix status and info
+nix-info:
+    #!/usr/bin/bash
+    echo "📊 Nix Installation Status"
+    echo "=========================="
+    echo ""
+    
+    if command -v nix-toolbox &> /dev/null; then
+        echo "✅ Nix (via nix-toolbox): Installed"
+        nix-toolbox -- nix --version || true
+    else
+        echo "❌ Nix: Not installed (run 'ujust install-nix')"
+    fi
+    
+    echo ""
+    
+    if [ -f ~/.local/bin/home-manager ]; then
+        echo "✅ Home Manager wrapper: Configured"
+        if command -v home-manager &> /dev/null; then
+            home-manager --version || true
+        fi
+    else
+        echo "❌ Home Manager wrapper: Not configured (run 'ujust setup-nix-wrappers')"
+    fi
+    
+    echo ""
+    
+    if echo "$PATH" | grep -q "$HOME/.local/bin"; then
+        echo "✅ PATH: Configured (~/.local/bin in PATH)"
+    else
+        echo "⚠️  PATH: Not configured (run 'ujust setup-path' and reload shell)"
+    fi
+    
+    echo ""
+    echo "To install: ujust setup-nix-complete"
+
+# Remove wrapper scripts (keeps nix-toolbox intact)
+remove-wrappers:
+    #!/usr/bin/bash
+    echo "🗑️  Removing nix wrappers from ~/.local/bin..."
+    rm -f ~/.local/bin/nix
+    rm -f ~/.local/bin/home-manager
+    echo "✅ Wrappers removed"
+    echo "   Nix is still available via: toolbox run -c nix-toolbox-42 -- nix"
+
+# Uninstall everything (nix-toolbox and wrappers)
+uninstall-nix:
+    #!/usr/bin/bash
+    echo "⚠️  This will remove Nix, Home Manager, and all installed packages"
+    read -p "Are you sure? (yes/no): " confirm
+    if [ "$confirm" = "yes" ]; then
+        echo "Removing wrappers..."
+        just remove-wrappers || true
+        
+        echo "Removing nix-toolbox container..."
+        podman stop nix-toolbox 2>/dev/null || true
+        podman rm nix-toolbox 2>/dev/null || true
+        
+        echo "Removing /nix directory..."
+        if [ -d /nix ]; then
+            sudo rm -rf /nix
+        fi
+        
+        echo "Removing user Nix data..."
+        rm -rf ~/.nix-profile ~/.nix-defexpr ~/.nix-channels ~/.local/state/nix
+        
+        echo "✅ Nix completely removed"
+    else
+        echo "Cancelled"
+    fi
+
+# Update Nix channels and Home Manager
+update-nix:
+    #!/usr/bin/bash
+    echo "🔄 Updating Nix channels..."
+    
+    if ! command -v nix-channel &> /dev/null; then
+        echo "❌ Error: Nix not available. Run 'ujust setup-nix-complete' first"
+        exit 1
+    fi
+    
+    nix-channel --update
+    echo ""
+    echo "✅ Channels updated!"
+    echo "   Apply updates: home-manager switch"
+
+# Show help
+help:
+    @echo "Flow Blue - Nix Management Commands"
+    @echo "===================================="
+    @echo ""
+    @echo "Setup:"
+    @echo "  ujust setup-nix-complete   Complete Nix + Home Manager setup"
+    @echo "  ujust install-nix          Install nix-toolbox"
+    @echo "  ujust setup-nix-wrappers   Create host wrappers for nix commands"
+    @echo "  ujust setup-path           Add ~/.local/bin to PATH"
+    @echo ""
+    @echo "Usage:"
+    @echo "  ujust nix-info             Show installation status"
+    @echo "  ujust update-nix           Update Nix channels"
+    @echo ""
+    @echo "Maintenance:"
+    @echo "  ujust remove-wrappers      Remove wrapper scripts"
+    @echo "  ujust uninstall-nix        Complete uninstall"
+    @echo ""
+    @echo "After setup, use nix commands directly on host:"
+    @echo "  nix search nixpkgs firefox"
+    @echo "  home-manager edit"
+    @echo "  home-manager switch"

@@ -66,9 +66,9 @@ modules:
   # Configure greetd
   - type: files
     files:
-      - source: system_files/greetd/config.toml
+      - source: system/etc/greetd/config.toml
         destination: /etc/greetd/config.toml
-      - source: system_files/justfile
+      - source: system/usr/justfile
         destination: /usr/share/ublue-os/just/60-flow-blue.just
 
   # Enable required services

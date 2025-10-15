@@ -1,0 +1,18 @@
+# Greetd configuration for Flow Blue
+# Minimal display manager for Wayland compositors
+
+[terminal]
+# Which VT to run the greeter on
+vt = 1
+
+[default_session]
+# Use tuigreet for a simple TUI login
+# After login, user's shell will start and they can launch their WM
+command = "tuigreet --cmd $SHELL"
+user = "greeter"
+
+# Optional: Uncomment for auto-login (single-user systems)
+# Replace 'yourusername' with your actual username
+# [initial_session]
+# command = "/home/yourusername/.nix-profile/bin/river"
+# user = "yourusername"
