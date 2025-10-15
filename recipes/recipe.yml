@@ -3,43 +3,87 @@
 # image will be published to ghcr.io/<user>/<name>
 name: flow-blue
 # description will be included in the image's metadata
-description: This is my personal OS image.
+description: Base OS image for Flow Blue a minimal custom Fedora-based OS to use with nix and home-manager
 
 # the base image to build on top of (FROM) and the version tag to use
-base-image: ghcr.io/ublue-os/silverblue-main
+base-image: ghcr.io/ublue-os/base-main
 image-version: 42 # latest is also supported if you want new updates ASAP
 
 # module configuration, executed in order
 # you can include multiple instances of the same module
 modules:
+# Install essential packages for Wayland compositors
+  - type: rpm-ostree
+    repos:
+      # Uncomment if you need specific COPR repos
+      # - https://copr.fedorainfracloud.org/coprs/user/repo/repo/fedora-$releasever-$basearch/
+      
+    install:
+      # === Display/Session Management ===
+      - greetd              # Minimal display manager
+      - greetd-tuigreet     # TUI greeter for greetd
+      
+      # === Seat Management (CRITICAL for Wayland) ===
+      - seatd               # Seat management daemon
+      # Note: libseat is likely already in base-main
+      
+      # === Audio Stack ===
+      # PipeWire is likely in base-main, but ensure these are present:
+      - pipewire-alsa
+      - pipewire-pulseaudio
+      - wireplumber
+      
+      # === Wayland Portals (CRITICAL) ===
+      - xdg-desktop-portal          # Base portal
+      - xdg-desktop-portal-wlr      # For wlroots-based WMs (River, Sway)
+      - xdg-desktop-portal-gtk      # GTK fallback
+      
+      # === Graphics Drivers ===
+      # Mesa is in base-main, but ensure Vulkan:
+      - mesa-vulkan-drivers
+      - vulkan-loader
+      
+      # === Polkit (for privilege escalation) ===
+      - polkit
+      
+      # === Bluetooth (if needed) ===
+      - bluez
+      - bluez-obexd
+      
+      # === Fonts (minimal set) ===
+      - google-noto-sans-fonts
+      - google-noto-emoji-fonts
+      
+      # === Useful CLI tools ===
+      - vim-enhanced        # Better than vi
+      - htop               # System monitor
+      - git                # Version control
+      
+    remove:
+      # Nothing to remove from base-main - it's already minimal
+      # Add packages here if you find unnecessary ones later
+
+  # Configure greetd
   - type: files
     files:
-      - source: system
-        destination: / # copies files/system/* (* means everything inside it) into your image's root folder /
+      - source: system_files/greetd/config.toml
+        destination: /etc/greetd/config.toml
+      - source: system_files/justfile
+        destination: /usr/share/ublue-os/just/60-flow-blue.just
 
-  - type: dnf
-    repos:
-      copr:
-        - atim/starship
-    install:
-      packages:
-        - micro
-        - starship
-    remove:
-      packages:
-        # example: removing firefox (in favor of the flatpak)
-        # "firefox" is the main package, "firefox-langpacks" is a dependency
-        - firefox
-        - firefox-langpacks # also remove firefox dependency (not required for all packages, this is a special case)
+  # Enable required services
+  - type: systemd
+    system:
+      enabled:
+        - greetd.service
+        - seatd.service
+      disabled: []
+      masked: []
 
-  - type: default-flatpaks
-    configurations:
-      - notify: true # Send notification after install/uninstall is finished (true/false)
-        scope: system
-        # If no repo information is specified, Flathub will be used by default
-        install: # system flatpaks we want all users to have and not remove
-          - org.mozilla.firefox
-          - org.gnome.Loupe
-      - scope: user # Also add Flathub user repo, but no user packages
+  # Post-install script (optional)
+  - type: script
+    snippets:
+      - "echo 'Flow Blue configured - minimal Wayland base ready'"
+      - "echo 'Install your compositor via Nix and Home Manager'"
 
   - type: signing # this sets up the proper policy & signing files for signed images to work fully
